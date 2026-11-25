@@ -66,7 +66,8 @@
        classic "page unresponsive / Wait or Exit" hang when scrolling the list. Detach it, and stop the
        forever-animating blobs, so TV scrolling stays smooth. */
     "html.tv body{background-attachment:scroll}" +
-    "html.tv .blob{animation:none}";
+    "html.tv .blob{animation:none}" +
+    "@keyframes faGlow{0%,100%{box-shadow:0 0 0 0 rgba(23,166,115,.55)}70%{box-shadow:0 0 0 10px rgba(23,166,115,0)}}";
   (document.head || root).appendChild(css);
 
   /* ---------------- UI chrome ---------------- */
@@ -305,6 +306,30 @@
       setTimeout(function () { tt.style.transition = "opacity .6s"; tt.style.opacity = "0"; setTimeout(function () { try { tt.remove(); } catch (_) {} }, 650); }, 3400);
     } catch (_) {}
   }
+  function faCelebrate() {
+    // Big, unmissable unlock moment (in the game that earned the 3rd star), with a direct Play-David button + spoken cheer.
+    try {
+      var ov = document.createElement("div");
+      ov.id = "faWin";
+      ov.style.cssText = "position:fixed;inset:0;z-index:2147483640;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;background:radial-gradient(120% 120% at 50% 30%,rgba(26,39,64,.97),rgba(11,23,38,.98));color:#f4ecda;font-family:inherit";
+      ov.innerHTML =
+        '<div style="font-size:72px;line-height:1;margin-bottom:6px">🎉🐑⚔️</div>' +
+        '<div style="font-weight:900;font-size:clamp(26px,6vw,44px);color:#ffe27a">You unlocked David!</div>' +
+        '<div style="font-size:clamp(16px,3.6vw,22px);margin:12px 0 22px;max-width:28ch;line-height:1.5">You collected <b>3 ⭐</b> — play David Co-op Quest for <b>30 minutes</b>!</div>';
+      var go = document.createElement("a");
+      go.href = "../david/";
+      go.innerHTML = "🐑 Play David ▶️";
+      go.style.cssText = "font:900 22px inherit;color:#241a12;background:linear-gradient(180deg,#f7d271,#e0a92e);border-radius:14px;padding:16px 34px;text-decoration:none;box-shadow:0 7px 0 #9c7318;margin-bottom:16px";
+      var stay = document.createElement("button");
+      stay.type = "button";
+      stay.textContent = "Keep playing here";
+      stay.style.cssText = "font:800 15px inherit;color:#cdd6e6;background:transparent;border:0;cursor:pointer;text-decoration:underline";
+      stay.onclick = function () { try { ov.remove(); } catch (_) {} };
+      ov.appendChild(go); ov.appendChild(stay);
+      (document.body || root).appendChild(ov);
+      try { if (window.speechSynthesis) { speechSynthesis.cancel(); var u = new SpeechSynthesisUtterance("You unlocked David! Great job! You can play for thirty minutes."); u.rate = 0.95; speechSynthesis.speak(u); } } catch (_) {}
+    } catch (_) {}
+  }
   if (isHub) {
     // paint the David tile's lock / unlock state and keep it fresh
     var faPaintTile = function () {
@@ -321,11 +346,13 @@
       if (faUnlocked()) {
         badge.textContent = "✓ Unlocked · " + faMinsLeft() + "m";
         badge.style.background = "#17a673";
-        if (play) play.textContent = "Play ▶️";
+        badge.style.animation = "faGlow 1.8s ease-out infinite";
+        if (play) play.textContent = "Play David ▶️";
       } else {
         var done = faGet(FA_DONE);
         badge.textContent = "🔒 " + done + " / " + FA_NEED + " ⭐";
         badge.style.background = "#8a7fb0";
+        badge.style.animation = "";
         if (play) play.textContent = "Collect " + (FA_NEED - done) + " ⭐";
       }
     };
@@ -347,7 +374,7 @@
       if (done >= FA_NEED) {
         faSet(FA_DONE, 0);
         faSet(FA_UNTIL, Date.now() + FA_REWARD_MS);
-        faToast("🎉 David Co-op Quest unlocked for 30 minutes! 🐑");
+        faCelebrate();
       } else {
         faSet(FA_DONE, done);
         faToast("⭐ +" + w + " — " + done + " of " + FA_NEED + " stars, " + (FA_NEED - done) + " more to unlock David!");
