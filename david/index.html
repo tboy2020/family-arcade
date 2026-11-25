@@ -46,6 +46,7 @@
       <div class="ep">Kingdom Quest — Shepherds Together (2–4 players)</div>
       <div class="slots" id="slots"></div>
       <button class="cta" id="btnStart">Begin the adventure</button>
+      <button class="cta" id="btnContinue" style="display:none;background:linear-gradient(180deg,#8fd18f,#49a049);box-shadow:0 6px 0 #2f6b2f,0 12px 24px rgba(0,0,0,.4);margin-top:10px">▶ Continue</button>
       <div class="hint"><b>On Xbox:</b> each player holds <b>☰ Menu → “Use game controls”</b> on their controller, presses <b>Ⓐ</b> to join, then any player presses <b>☰ Start</b> to begin.<br>
         Move with the stick/D-pad · <b>Ⓐ</b> jump · <b>Ⓧ</b> sling the stone · stand by a fallen friend to <b>revive</b> them.<br>
         Player 1 can also use the keyboard: <b>← →</b> move · <b>Space</b> jump · <b>F</b> sling · <b>Enter</b> start.</div>
@@ -93,7 +94,7 @@ const S={ jump:()=>beep(430,.13,'square',.04,220), sling:()=>beep(250,.1,'triang
 /* ---------- state ---------- */
 let state='title';
 let players=[], stones=[], enemies=[], spears=[], shocks=[], parts=[], floats=[], confetti=[];
-let boss=null, stage=0, shake=0, flash=0, slow=1, t=0, declare={t:0,txt:''}, winT=0, score=0, banner={t:0,txt:''}, startCountdown=0, hintTimer=0, declareUI=null;
+let boss=null, stage=0, curScene=0, shake=0, flash=0, slow=1, t=0, declare={t:0,txt:''}, winT=0, score=0, banner={t:0,txt:''}, startCountdown=0, hintTimer=0, declareUI=null;
 const prevPad={}; // edge detection per "padIndex:button"
 const keys={}; const prevKeys={};
 
@@ -161,10 +162,9 @@ function readInput(p){
 /* ---------- lifecycle ---------- */
 function reset(keepPlayers){
   stones=[]; enemies=[]; spears=[]; shocks=[]; parts=[]; floats=[]; confetti=[]; boss=null;
-  stage=0; shake=0; flash=0; slow=1; declare={t:0,txt:''}; winT=0; score=0; banner={t:0,txt:''};
+  stage=0; curScene=0; shake=0; flash=0; slow=1; declare={t:0,txt:''}; winT=0; score=0; banner={t:0,txt:''};
   if(!keepPlayers) players=[];
   players.forEach((p,i)=>{ p.x=ARENA_L+120+i*120; p.y=GY; p.vx=0; p.vy=0; p.ground=true; p.hp=3; p.iframe=0; p.down=false; p.reviveBy=0; p.slingCd=0; });
-  startStage(1);
 }
 function startStage(n){
   stage=n; enemies=[]; spears=[]; shocks=[]; boss=null;
@@ -185,6 +185,23 @@ function startStage(n){
     declareUI={ round:0, sel:1, msg:'', msgT:0, spoke:-1, flash:0 }; players.forEach(p=>{ p.stones=5; p.down=false; p.hp=3; p.reviveBy=0; });  // everyone stands fresh for the great battle
   }
 }
+
+/* ---------- scenes: a generic, extensible journey (any scene can follow any other) + save/resume ---------- */
+const combatCleared = ()=> enemies.length===0 && banner.t<=0;
+const SCENES = [
+  { key:'pasture', title:'The Pasture', enter:()=>startStage(1), done:combatCleared },
+  { key:'lion',    title:'The Lion',    enter:()=>startStage(2), done:combatCleared },
+  { key:'bear',    title:'The Bear',    enter:()=>startStage(3), done:combatCleared },
+  { key:'goliath', title:'Goliath',     enter:()=>startStage(4), done:()=> !!(boss&&boss.down) && winT<=0 },
+];
+const CP_KEY='david_scene';
+function saveCheckpoint(){ try{ if(curScene>0 && curScene<SCENES.length) localStorage.setItem(CP_KEY,String(curScene)); }catch(_){}}
+function loadCheckpoint(){ try{ return parseInt(localStorage.getItem(CP_KEY)||'0',10)||0; }catch(_){ return 0; } }
+function clearCheckpoint(){ try{ localStorage.removeItem(CP_KEY); }catch(_){}}
+function clampScene(i){ return Math.min(Math.max(0,i|0), SCENES.length-1); }
+function enterScene(i){ curScene=clampScene(i); saveCheckpoint(); SCENES[curScene].enter(); }
+function advanceScene(){ if(curScene+1>=SCENES.length){ curScene=SCENES.length; clearCheckpoint(); winGame(); return; } enterScene(curScene+1); }
+function refreshContinue(){ const b=document.getElementById('btnContinue'); if(!b) return; const cp=loadCheckpoint(); if(cp>0 && cp<SCENES.length){ b.style.display=''; b.textContent='▶ Continue — '+SCENES[cp].title; } else b.style.display='none'; }
 function spawnWolf(side, delay){
   enemies.push({ type:'wolf', x: side<0? ARENA_L-40 : ARENA_R+40, y:GY, vx:0, hp:1, dir:side<0?1:-1, hurt:0, delay:delay||0, w:52,h:34 });
 }
@@ -243,7 +260,7 @@ function update(rdt){
   t+=rdt;
   if(declare.t>0){ declare.t-=rdt; if(declare.t<=0.9) slow=Math.min(1,slow+rdt*1.6); }
   if(banner.t>0) banner.t-=rdt;
-  if(winT>0){ winT-=rdt; if(winT<=0){ winGame(); return; } }
+  if(winT>0){ winT-=rdt; }   // victory slow-mo; the scene-complete check below flows into the next scene / finishes the journey
   const dt=rdt*slow;
 
   // Goliath Part A: "Declare the Word" — a Scripture moment; combat is frozen until they speak it
@@ -343,8 +360,8 @@ function update(rdt){
   reconnectPads();
   if(stage<=3) pollJoins();
 
-  // stage progression: clear a combat stage (wolves/lion/bear) -> advance toward Goliath
-  if(stage>=1 && stage<=3 && enemies.length===0 && banner.t<=0){ startStage(stage+1); }
+  // scene progression: when the current scene is complete, flow into the next one (or finish the journey)
+  if(state==='play' && curScene<SCENES.length && SCENES[curScene].done()){ advanceScene(); }
 
   // lose: everyone (still connected) down
   const roster=players.filter(p=>!p.inactive);
@@ -593,21 +610,24 @@ function renderSlots(){ const el=document.getElementById('slots'); if(!el) retur
 function show(id){ ['scTitle','scWin','scLose'].forEach(s=>{ const e=document.getElementById(s); if(e) e.classList.toggle('hidden', s!==id); }); }
 function hideAll(){ ['scTitle','scWin','scLose'].forEach(s=>{ const e=document.getElementById(s); if(e) e.classList.add('hidden'); }); }
 function audioKick(){ if(!AC){ try{ AC=new(window.AudioContext||window.webkitAudioContext)(); }catch(e){} } if(AC&&AC.state!=='running'){ try{ AC.resume(); }catch(e){} } }
-function startGame(){ audioKick();
+function beginPlay(sceneIndex){ audioKick();
   if(players.length===0) ensureKbPlayer();           // solo fallback so it always starts
-  reset(true); state='play'; hideAll(); startCountdown=0;
+  reset(true); enterScene(clampScene(sceneIndex)); state='play'; hideAll(); startCountdown=0;
   const h=document.getElementById('gpHint'); h.style.display='block'; h.style.opacity='1';
   clearTimeout(hintTimer); hintTimer=setTimeout(()=>{ h.style.opacity='0'; setTimeout(()=>{ h.style.display='none'; },600); }, 9000);
 }
-function winGame(){ state='win'; document.getElementById('winStat').textContent='A shepherd band of '+players.filter(p=>!p.inactive).length+' · Score '+score; show('scWin'); }
+function startGame(){ clearCheckpoint(); beginPlay(0); }                // begin the journey from the start
+function continueGame(){ beginPlay(loadCheckpoint()); }                 // resume from the saved scene
+function winGame(){ state='win'; clearCheckpoint(); document.getElementById('winStat').textContent='A shepherd band of '+players.filter(p=>!p.inactive).length+' · Score '+score; show('scWin'); }
 function loseGame(){ state='lose'; show('scLose'); }
 document.getElementById('btnStart').onclick=startGame;
+const _bc=document.getElementById('btnContinue'); if(_bc) _bc.onclick=continueGame;
 document.getElementById('btnWin').onclick=startGame;
-document.getElementById('btnLose').onclick=startGame;
+document.getElementById('btnLose').onclick=continueGame;   // "Try again" resumes the scene you were on
 window.addEventListener('gamepadconnected',()=>{ reconnectPads(); });
 window.addEventListener('gamepaddisconnected',e=>{ const p=players.find(pl=>!pl.kb && pl.pad===e.gamepad.index); if(p){ p.inactive=true; p.pad=null; } });
 
-renderSlots(); show('scTitle'); requestAnimationFrame(loop);
+renderSlots(); refreshContinue(); show('scTitle'); requestAnimationFrame(loop);
 </script>
 <a href="../index.html" aria-label="Back to the Arcade" style="position:fixed;bottom:10px;left:10px;z-index:99999;background:rgba(26,16,66,.85);color:#e9e4f5;font:800 14px/1 'Inter',system-ui,sans-serif;text-decoration:none;padding:8px 14px;border-radius:999px;border:1px solid #ffffff33">&#8592; Arcade</a>
 <script>
