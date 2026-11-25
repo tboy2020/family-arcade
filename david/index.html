@@ -193,6 +193,7 @@ const SCENES = [
   { key:'lion',    title:'The Lion',    enter:()=>startStage(2), done:combatCleared },
   { key:'bear',    title:'The Bear',    enter:()=>startStage(3), done:combatCleared },
   { key:'fishing', title:'By the Brook', enter:fishEnter, update:fishUpdate, render:fishRender, done:()=> fishDone && fishWinT<=0 },
+  { key:'cook',    title:'By the Fire',  enter:cookEnter, update:cookUpdate, render:cookRender, done:()=> cookDone && cookWinT<=0 },
   { key:'goliath', title:'Goliath',     enter:()=>startStage(4), done:()=> !!(boss&&boss.down) && winT<=0 },
 ];
 const CP_KEY='david_scene_v2';
@@ -308,6 +309,93 @@ function fishDrawBasket(){ const cx=W/2, cy=H-44;
   x.strokeStyle='#6b4424'; x.lineWidth=2; for(let i=-60;i<=60;i+=12){ x.beginPath(); x.moveTo(cx+i,cy-18); x.lineTo(cx+i,cy+16); x.stroke(); }
   x.textAlign='center'; x.fillStyle='#f4ecda'; x.font='800 16px "Inter",sans-serif'; x.fillText('Basket  '+fishCaught+' / '+FISH_TARGET, cx, cy-26); }
 function fishVignette(){ const g=x.createRadialGradient(W/2,H/2,H*0.42,W/2,H/2,H*0.95); g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(8,18,28,.5)'); x.fillStyle=g; x.fillRect(0,0,W,H); }
+
+/* ---------- SCENE: By the Fire — the timed "cook the catch" (Psalm 23:5) ---------- */
+const COOK_TIME=75;
+let cookPlate=0, cookTarget=8, cookTimer=COOK_TIME, cookDone=false, cookWinT=0, cookFlyers=[];
+function cookAct(p){ if(p.kb){ const a=keys.Space||keys.KeyW||keys.ArrowUp, fl=keys.KeyF; const at=a&&!p.c.ah; p.c.ah=a; const ft=fl&&!p.c.fh; p.c.fh=fl; return {a:at,flip:ft}; }
+  const gp=pads()[p.pad]; if(!gp) return {a:false,flip:false}; return { a:padEdge(p.pad,0,gp), flip:padEdge(p.pad,2,gp)||padEdge(p.pad,5,gp) }; }
+function cookNewC(){ return { st:'empty', done:0, flipped:false, served:0, pop:0, ah:true, fh:true }; }
+function cookEnter(){
+  stones=[]; enemies=[]; spears=[]; shocks=[]; boss=null; declareUI=null; slow=1; winT=0; cookWinT=0; cookDone=false;
+  cookPlate=0; cookFlyers=[]; flash=0;
+  const n=Math.max(1,players.filter(p=>!p.inactive).length); cookTarget=2*n+2; cookTimer=COOK_TIME;
+  banner={t:3.8,txt:'By the fire — cook the fish before the embers die! Pull each one when it turns GOLDEN.'};
+  players.forEach((p,i)=>{ p.x=ARENA_L+140+i*((ARENA_R-ARENA_L-240)/3); p.y=GY; p.down=false; p.c=cookNewC(); p.c.ah=!!(keys.Space||keys.KeyW||keys.ArrowUp); p.c.fh=!!keys.KeyF; });
+  const h=document.getElementById('gpHint'); if(h) h.textContent='🔥 Ⓐ put a fish on the fire · Ⓧ flip it · Ⓐ pull it when it is GOLDEN (not raw, not burnt!)';
+  S.stage();
+}
+function cookServe(p){ const C=p.c; cookPlate++; C.served++; C.pop=0.8; C.st='empty'; C.done=0; C.flipped=false; S.revive(); flash=Math.max(flash,.2);
+  floatTxt(p.x,GY-170,'Golden! +1',p.col.hi); for(let i=0;i<8;i++) parts.push({x:p.x,y:GY-120,vx:(Math.random()-.5)*140,vy:-Math.random()*150-20,life:.5,c:'#f2c14e',s:3});
+  cookFlyers.push({ x:p.x, y:GY-120, vx:(W/2-p.x)/1.0, vy:-230, ty:H-52, col:'#e0a24a' }); }
+function cookUpdate(rdt){
+  if(banner.t>0) banner.t-=rdt;
+  if(flash>0) flash=Math.max(0,flash-rdt*1.6);
+  reconnectPads(); pollJoins();
+  players.forEach((p,i)=>{ if(p.inactive) return; if(!p.c){ p.x=Math.max(ARENA_L+40,Math.min(ARENA_R-40,ARENA_L+140+i*((ARENA_R-ARENA_L-240)/3))); p.y=GY; p.down=false; p.c=cookNewC(); }
+    const a=cookAct(p), C=p.c; if(C.pop>0)C.pop-=rdt;
+    if(C.st==='empty'){ if(a.a){ C.st='cooking'; C.done=0; C.flipped=false; S.thud(); } }
+    else if(C.st==='cooking'){ C.done+=0.30*rdt;
+      if(a.flip && !C.flipped){ C.flipped=true; floatTxt(p.x,GY-150,'Flipped!',p.col.hi); S.sling(); }
+      const lo=C.flipped?0.68:0.75, hi=C.flipped?1.45:1.30, burnt=C.flipped?1.75:1.55;
+      if(a.a){ if(C.done>=lo && C.done<=hi) cookServe(p); else if(C.done<lo) floatTxt(p.x,GY-150,'Still raw — leave it on!','#bcdcff'); }
+      if(C.st==='cooking' && C.done>=burnt){ C.st='empty'; C.done=0; C.flipped=false; floatTxt(p.x,GY-150,'Burnt! Start another','#ffb0a0'); S.splash(); } }
+  });
+  if(cookTimer>0 && !cookDone){ cookTimer-=rdt; if(cookTimer<0)cookTimer=0; }
+  for(const b of cookFlyers){ if(b.vy!=null){ b.vy+=900*rdt; b.x+=b.vx*rdt; b.y+=b.vy*rdt; if(b.y>=b.ty){ b.y=b.ty; b.vy=null; } } }
+  for(const pt of parts){ pt.vy+=700*rdt; pt.x+=pt.vx*rdt; pt.y+=pt.vy*rdt; pt.life-=rdt; } parts=parts.filter(q=>q.life>0);
+  for(const f of floats){ f.y-=rdt*40; f.life-=rdt; } floats=floats.filter(f=>f.life>0);
+  if(!cookDone && (cookTimer<=0 || cookPlate>=cookTarget)){ cookDone=true; cookWinT=2.8; const m=cookPlate>=cookTarget?'A feast for the household! ':'Enough for tonight — '; banner={t:2.8,txt:m+'“Thou preparest a table before me.” — Psalm 23:5'}; flash=.5; S.win(); }
+  if(cookWinT>0) cookWinT-=rdt;
+}
+function cookRender(){ x.clearRect(0,0,W,H); cookDrawNight(); cookDrawGround(); cookDrawFire();
+  for(const p of players){ if(p.inactive||!p.c) continue; cookDrawCook(p); }
+  for(const pt of parts){ x.globalAlpha=Math.max(0,Math.min(1,pt.life*2)); dot(pt.x,pt.y,pt.s,pt.c);} x.globalAlpha=1;
+  for(const b of cookFlyers){ x.fillStyle=b.col; x.beginPath(); x.ellipse(b.x,b.y,14,9,0,0,7); x.fill(); x.fillStyle='#6b4a2a'; x.beginPath(); x.moveTo(b.x-14,b.y); x.lineTo(b.x-22,b.y-5); x.lineTo(b.x-22,b.y+5); x.closePath(); x.fill(); }
+  cookDrawPlate(); cookDrawTimer();
+  for(const f of floats){ x.globalAlpha=Math.max(0,Math.min(1,f.life*1.3)); x.fillStyle=f.c; x.font='800 18px "Fraunces",serif'; x.textAlign='center'; x.fillText(f.txt,f.x,f.y);} x.globalAlpha=1;
+  if(flash>0){ x.fillStyle='rgba(255,230,180,'+flash+')'; x.fillRect(0,0,W,H); }
+  if(banner.t>0){ x.globalAlpha=Math.min(1,banner.t); x.textAlign='center'; x.font='italic 600 22px "Fraunces",serif'; x.fillStyle='rgba(20,12,6,.55)'; rr(W/2-350,24,700,42,10); x.fill(); x.fillStyle='#ffe9c6'; x.fillText(banner.txt,W/2,52); x.globalAlpha=1; }
+  cookVignette();
+}
+function cookDrawNight(){ const g=x.createLinearGradient(0,0,0,GY+40); g.addColorStop(0,'#1a1430'); g.addColorStop(.6,'#2e2238'); g.addColorStop(1,'#3a2a26'); x.fillStyle=g; x.fillRect(0,0,W,H);
+  for(let i=0;i<46;i++){ const sx2=(i*137)%W, sy2=(i*83)%(GY-100); x.globalAlpha=.25+0.5*Math.abs(Math.sin(i*2.1+t*0.6)); x.fillStyle='#fff5d2'; x.fillRect(sx2,sy2,2,2); } x.globalAlpha=1;
+  x.fillStyle='rgba(255,250,235,.85)'; x.beginPath(); x.arc(W*0.84,112,40,0,7); x.fill(); x.fillStyle='#2e2238'; x.beginPath(); x.arc(W*0.84+16,100,36,0,7); x.fill(); }
+function cookDrawGround(){ x.fillStyle='#2a2018'; x.fillRect(0,GY,W,H-GY); x.fillStyle='#352a1e'; x.fillRect(0,GY,W,8); }
+function cookDrawFire(){ const cx=W/2, cy=GY-8;
+  const gg=x.createRadialGradient(cx,cy-24,10,cx,cy-24,280); gg.addColorStop(0,'rgba(255,170,60,'+(0.32+Math.sin(t*6)*0.05)+')'); gg.addColorStop(1,'rgba(255,170,60,0)'); x.fillStyle=gg; x.fillRect(0,0,W,H);
+  x.strokeStyle='#5a3a22'; x.lineWidth=11; x.lineCap='round'; x.beginPath(); x.moveTo(cx-46,cy); x.lineTo(cx+46,cy-8); x.moveTo(cx-46,cy-8); x.lineTo(cx+46,cy); x.stroke(); x.lineCap='butt';
+  const dim=Math.max(.35,cookTimer/COOK_TIME);
+  for(let i=0;i<3;i++){ const fh=(50+Math.sin(t*9+i*2)*18)*dim, fw=22-i*4, ox=(i-1)*12; x.fillStyle=['#ff6a2a','#ff9e3a','#ffd24a'][i]; x.beginPath(); x.moveTo(cx-fw+ox,cy-6); x.quadraticCurveTo(cx+ox,cy-fh,cx+fw+ox,cy-6); x.closePath(); x.fill(); } }
+function cookDrawCook(p){ const bx=p.x, feet=GY, C=p.c;
+  x.save(); x.translate(bx,feet);
+  x.globalAlpha=.26; x.fillStyle='#000'; x.beginPath(); x.ellipse(0,2,24,6,0,0,7); x.fill(); x.globalAlpha=1;
+  x.strokeStyle='#7a4a28'; x.lineWidth=8; x.lineCap='round'; x.beginPath(); x.moveTo(-5,-52); x.lineTo(-5,-8); x.moveTo(5,-52); x.lineTo(5,-8); x.stroke(); x.lineCap='butt';
+  x.fillStyle=p.col.tunic; x.beginPath(); x.roundRect(-17,-100,34,52,8); x.fill(); x.fillStyle=p.col.hi; x.fillRect(-17,-74,34,5);
+  x.fillStyle='#e8b584'; x.beginPath(); x.arc(0,-108,12,0,7); x.fill(); x.fillStyle='#b4542f'; x.beginPath(); x.arc(0,-114,12,Math.PI*1.02,Math.PI*2.02); x.fill();
+  x.restore();
+  const dir=bx<W/2?1:-1, tipX=bx+dir*72, tipY=feet-66;
+  x.strokeStyle='#8a6a3a'; x.lineWidth=3; x.beginPath(); x.moveTo(bx+dir*8,feet-90); x.lineTo(tipX,tipY); x.stroke();
+  if(C.st==='cooking'){ const lo=C.flipped?0.68:0.75, hi=C.flipped?1.45:1.30, burnt=C.flipped?1.75:1.55, mx=burnt;
+    let col; if(C.done<lo) col='#d9c7b0'; else if(C.done<=hi) col=(Math.floor(t*8)%2)?'#f7cf5e':'#e0a24a'; else col='#6b4a2a';
+    x.save(); x.translate(tipX,tipY); if(dir<0)x.scale(-1,1); x.fillStyle=col; x.beginPath(); x.ellipse(0,0,20,11,0,0,7); x.fill(); x.beginPath(); x.moveTo(-20,0); x.lineTo(-30,-7); x.lineTo(-30,7); x.closePath(); x.fill(); x.restore();
+    const gw=104, gx=bx-gw/2, gy=feet-160;
+    x.fillStyle='rgba(0,0,0,.4)'; rr(gx,gy,gw,10,4); x.fill();
+    x.fillStyle='rgba(242,193,78,.5)'; rr(gx+gw*(lo/mx),gy,gw*((hi-lo)/mx),10,4); x.fill();
+    const dX=gx+gw*Math.min(1,C.done/mx); x.fillStyle=C.done>hi?'#ff5a3c':(C.done>=lo?'#ffe27a':'#bcdcff'); x.fillRect(dX-2,gy-3,4,16);
+    if(C.done>=lo && C.done<=hi){ x.fillStyle=(Math.floor(t*6)%2)?'#ffe27a':'#ffd24a'; x.font='800 13px "Inter",sans-serif'; x.textAlign='center'; x.fillText('PULL!',bx,gy-5); }
+  }
+  x.fillStyle=p.col.hi; x.font='800 12px "Inter",sans-serif'; x.textAlign='center'; x.globalAlpha=.9; x.fillText(p.col.name+'  '+C.served,bx,feet-126); x.globalAlpha=1;
+}
+function cookDrawPlate(){ const cx=W/2, cy=H-44;
+  x.fillStyle='#d8c7a8'; x.beginPath(); x.ellipse(cx,cy,76,21,0,0,7); x.fill(); x.fillStyle='#c0ad88'; x.beginPath(); x.ellipse(cx,cy,56,13,0,0,7); x.fill();
+  for(let i=0;i<Math.min(cookPlate,10);i++){ x.fillStyle='#e0a24a'; x.beginPath(); x.ellipse(cx-50+ (i%5)*25, cy-2-(i>4?6:0), 9,5,0,0,7); x.fill(); }
+  x.textAlign='center'; x.fillStyle='#ffe9c6'; x.font='800 16px "Inter",sans-serif'; x.fillText('Served  '+cookPlate+' / '+cookTarget, cx, cy-30); }
+function cookDrawTimer(){ const fw=Math.max(0,cookTimer/COOK_TIME), gw=440, gx=W/2-gw/2, gy=22;
+  x.fillStyle='rgba(0,0,0,.4)'; rr(gx-6,gy-6,gw+12,22,8); x.fill();
+  x.fillStyle=cookTimer<15?'#ff5a3c':'#ff9e3a'; rr(gx,gy,gw*fw,10,5); x.fill();
+  x.textAlign='center'; x.fillStyle='#ffe9c6'; x.font='800 13px "Inter",sans-serif'; x.fillText('🔥 the embers are dying — '+Math.ceil(cookTimer)+'s', W/2, gy+30); }
+function cookVignette(){ const g=x.createRadialGradient(W/2,H/2,H*0.42,W/2,H/2,H*0.95); g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(10,6,2,.55)'); x.fillStyle=g; x.fillRect(0,0,W,H); }
 
 function spawnWolf(side, delay){
   enemies.push({ type:'wolf', x: side<0? ARENA_L-40 : ARENA_R+40, y:GY, vx:0, hp:1, dir:side<0?1:-1, hurt:0, delay:delay||0, w:52,h:34 });
