@@ -1,0 +1,637 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="author" content="Taiwo Adegoke">
+<meta name="copyright" content="© 2026 Taiwo Adegoke. All rights reserved.">
+<title>David Co-op Quest</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;1,9..144,500&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root{ color-scheme:dark; }
+  html,body{ margin:0; background:#0b1726; height:100%; }
+  body{ font-family:"Inter",system-ui,sans-serif; display:flex; align-items:center; justify-content:center; min-height:100%; }
+  #stage{ width:min(100vw, calc(94vh * 16 / 9)); margin:0 auto; }
+  .frame{ position:relative; width:100%; aspect-ratio:16/9; border-radius:16px; overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,.5), inset 0 0 0 2px #e3bd5a33; background:#0b1726; }
+  canvas{ display:block; width:100%; height:100%; image-rendering:auto; touch-action:none; }
+  .scr{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:20px; color:#f4ecda; pointer-events:none;
+    background:radial-gradient(120% 120% at 50% 30%, rgba(30,46,74,.55), rgba(8,14,26,.93)); }
+  .scr.hidden{ display:none; }
+  .scr h1{ font-family:"Fraunces",serif; font-weight:600; color:#f1d99b; font-size:clamp(30px,7vw,60px); margin:0; letter-spacing:.02em; text-shadow:0 3px 20px #0009; }
+  .scr .ep{ font-family:"Fraunces",serif; font-style:italic; opacity:.92; font-size:clamp(14px,3vw,22px); margin:8px 0 4px; }
+  .scr .verse2{ max-width:620px; font-family:"Fraunces",serif; font-style:italic; font-size:clamp(13px,2.4vw,18px); opacity:.88; margin:10px 16px; line-height:1.5; }
+  .scr .ref{ color:#e3bd5a; font-size:12px; letter-spacing:.08em; }
+  .scr .hint{ margin-top:12px; font-size:clamp(11px,1.8vw,14px); opacity:.78; max-width:640px; line-height:1.6; }
+  .slots{ display:flex; gap:12px; flex-wrap:wrap; justify-content:center; margin:14px 0 4px; }
+  .slot{ min-width:120px; padding:10px 14px; border-radius:14px; border:2px dashed #ffffff33; background:#ffffff0d; font-weight:800; font-size:clamp(12px,1.9vw,15px); }
+  .slot.joined{ border-style:solid; }
+  .cta{ margin-top:18px; font:800 18px "Inter",sans-serif; cursor:pointer; color:#241a12;
+    background:linear-gradient(180deg,#f7d271,#e0a92e); border:none; border-radius:11px; padding:12px 30px;
+    box-shadow:0 6px 0 #9c7318, 0 12px 24px rgba(0,0,0,.4); pointer-events:auto; }
+  .cta:active{ transform:translateY(3px); box-shadow:0 3px 0 #9c7318; }
+  .gphint{ position:fixed; pointer-events:none; left:50%; bottom:calc(10px + env(safe-area-inset-bottom,0)); transform:translateX(-50%);
+    z-index:40; background:rgba(26,16,66,.9); border:2px solid #ffffff33; color:#e9e4f5; font-weight:800;
+    font-size:clamp(11px,1.5vw,15px); padding:8px 16px; border-radius:999px; max-width:94vw; text-align:center; transition:opacity .5s; }
+</style>
+<div id="stage">
+  <div class="frame">
+    <canvas id="c" width="1280" height="720"></canvas>
+    <div class="gphint" id="gpHint" style="display:none">🎮 Each player: hold ☰ Menu → “Use game controls”, then press Ⓐ to join · ◀▶/stick move · Ⓐ jump · Ⓧ sling</div>
+
+    <div class="scr" id="scTitle">
+      <h1>DAVID</h1>
+      <div class="ep">Kingdom Quest — Shepherds Together (2–4 players)</div>
+      <div class="slots" id="slots"></div>
+      <button class="cta" id="btnStart">Begin the adventure</button>
+      <div class="hint"><b>On Xbox:</b> each player holds <b>☰ Menu → “Use game controls”</b> on their controller, presses <b>Ⓐ</b> to join, then any player presses <b>☰ Start</b> to begin.<br>
+        Move with the stick/D-pad · <b>Ⓐ</b> jump · <b>Ⓧ</b> sling the stone · stand by a fallen friend to <b>revive</b> them.<br>
+        Player 1 can also use the keyboard: <b>← →</b> move · <b>Space</b> jump · <b>F</b> sling · <b>Enter</b> start.</div>
+    </div>
+
+    <div class="scr hidden" id="scWin">
+      <h1>The Giant Falls</h1>
+      <div class="verse2">“Thou comest to me with a sword… but I come to thee in the name of the LORD of hosts.”</div>
+      <div class="ref">— 1 Samuel 17:45 (KJV)</div>
+      <div class="ep" id="winStat" style="font-style:normal"></div>
+      <button class="cta" id="btnWin">Play again</button>
+    </div>
+
+    <div class="scr hidden" id="scLose">
+      <h1 style="color:#e7a">Take heart</h1>
+      <div class="verse2">Even shepherds stumble. Stand together, steady your slings, and rise again.</div>
+      <button class="cta" id="btnLose">Try again</button>
+    </div>
+  </div>
+</div>
+<script>
+"use strict";
+const cv=document.getElementById('c'), x=cv.getContext('2d'), W=1280, H=720;
+const GY=H*0.82, GRAV=2300, SPD=300, JUMP=-860, ARENA_L=70, ARENA_R=W-70;
+const COLORS=[
+  {name:'David',  tunic:'#3b6ea5', hi:'#5a8fd0'},
+  {name:'Asahel', tunic:'#2f9e5e', hi:'#4fd08a'},
+  {name:'Eleazar',tunic:'#d8a52e', hi:'#f2c14e'},
+  {name:'Shammah',tunic:'#c24d85', hi:'#ec74a8'}
+];
+const VWIN=['The LORD saveth not with sword and spear — 1 Sam 17:47','Be strong and of a good courage — Joshua 1:9'];
+
+/* ---------- sound ---------- */
+let AC=null;
+function beep(f,d,type,v,slide){ if(!AC)return; try{ const o=AC.createOscillator(),g=AC.createGain(); o.type=type||'square'; o.frequency.value=f;
+  if(slide)o.frequency.exponentialRampToValueAtTime(Math.max(40,f+slide),AC.currentTime+d);
+  g.gain.value=v||0.05; g.gain.exponentialRampToValueAtTime(0.0001,AC.currentTime+d); o.connect(g).connect(AC.destination); o.start(); o.stop(AC.currentTime+d);}catch(e){} }
+const S={ jump:()=>beep(430,.13,'square',.04,220), sling:()=>beep(250,.1,'triangle',.05,-120),
+  hit:()=>beep(150,.2,'sawtooth',.06,-60), enemy:()=>beep(200,.13,'square',.05,-90),
+  thud:()=>beep(80,.26,'sawtooth',.07,-20), down:()=>beep(170,.3,'sawtooth',.06,-80),
+  revive:()=>{[520,700,900].forEach((f,i)=>setTimeout(()=>beep(f,.12,'sine',.06),i*70));},
+  stage:()=>{[523,659,784].forEach((f,i)=>setTimeout(()=>beep(f,.14,'triangle',.06),i*90));},
+  win:()=>{[523,659,784,1046,1318].forEach((f,i)=>setTimeout(()=>beep(f,.2,'triangle',.06),i*120));} };
+
+/* ---------- state ---------- */
+let state='title';
+let players=[], stones=[], enemies=[], spears=[], shocks=[], parts=[], floats=[], confetti=[];
+let boss=null, stage=0, shake=0, flash=0, slow=1, t=0, declare={t:0,txt:''}, winT=0, score=0, banner={t:0,txt:''}, startCountdown=0, hintTimer=0, declareUI=null;
+const prevPad={}; // edge detection per "padIndex:button"
+const keys={}; const prevKeys={};
+
+/* ---------- input ---------- */
+addEventListener('keydown',e=>{ keys[e.code]=true;
+  if(['ArrowLeft','ArrowRight','ArrowUp','Space','KeyF'].includes(e.code)) e.preventDefault();
+  if((state==='title'||state==='win'||state==='lose')&&e.code==='Enter') startGame();
+  // keyboard joins player 0 (the "kb" player) — only at the title, never mid-game
+  if(state==='title' && ['ArrowLeft','ArrowRight','ArrowUp','Space','KeyA','KeyD','KeyW','KeyF'].includes(e.code)) ensureKbPlayer();
+});
+addEventListener('keyup',e=>{ keys[e.code]=false; });
+addEventListener('blur',()=>{ for(const k in keys) keys[k]=false; });
+function pads(){ try{ return navigator.getGamepads?navigator.getGamepads():[]; }catch(e){ return []; } }
+function padPressed(gp,i){ return !!(gp && gp.buttons[i] && (gp.buttons[i].pressed || gp.buttons[i].value>0.5)); }
+function padEdge(idx,btn,gp){ const k=idx+':'+btn, now=padPressed(gp,btn), was=prevPad[k]; prevPad[k]=now; return now&&!was; }
+
+function ensureKbPlayer(){
+  if(players.some(p=>p.kb)) return;
+  if(players.length>=4) return;
+  addPlayer({kb:true});
+}
+function addPlayer(opts){
+  const i=players.length; if(i>=4) return null;
+  const col=COLORS[i];
+  const p={ idx:i, pad:(opts.pad!=null?opts.pad:null), kb:!!opts.kb, col,
+    x:ARENA_L+120+i*120, y:GY, vx:0, vy:0, ground:true, face:1, hp:3, iframe:0, kb2:false,
+    slingCd:0, jumpLatch:false, down:false, reviveBy:0, anim:0, t:Math.random()*6, kbVy:0, join:1 };
+  players.push(p); return p;
+}
+function pollJoins(){ // a controller FACE button joins a new player (A/B/X/Y)
+  const gs=pads();
+  for(let i=0;i<gs.length && i<8;i++){ const gp=gs[i]; if(!gp) continue;
+    if(players.some(p=>p.pad===i)) continue;
+    if([0,1,2,3].some(b=>padPressed(gp,b))){ if(players.length<4){ const np=addPlayer({pad:i}); if(np){ np.padId=gp.id; prevPad[i+':0']=prevPad[i+':2']=prevPad[i+':5']=true; } audioKick(); S.revive(); } }
+  }
+}
+function reconnectPads(){ // resume a dropped controller by its id instead of making a duplicate player
+  const gs=pads(); for(let i=0;i<gs.length&&i<8;i++){ const gp=gs[i]; if(!gp) continue; if(players.some(p=>p.pad===i)) continue;
+    const ex=players.find(q=>q.inactive&&q.padId===gp.id); if(ex){ ex.pad=i; ex.inactive=false; prevPad[i+':0']=prevPad[i+':2']=prevPad[i+':5']=true; } }
+}
+function checkPadStart(){ // a JOINED controller's Start (9) kicks off a short ready-countdown (Menu doubles as the mode-switch, so we never start instantly); a 2nd press skips it
+  const gs=pads();
+  for(let i=0;i<gs.length && i<8;i++){ const gp=gs[i]; if(!gp) continue; const se=padEdge('s'+i,9,gp);
+    if(se && players.some(p=>p.pad===i)){ if(startCountdown<=0) startCountdown=3.0; else startGame(); } }
+}
+function readInput(p){
+  // returns {mx:-1..1, jump:bool(edge), sling:bool(edge)}
+  let mx=0, jump=false, sling=false;
+  if(p.kb){
+    if(keys.ArrowLeft||keys.KeyA) mx-=1; if(keys.ArrowRight||keys.KeyD) mx+=1;
+    const jb=keys.Space||keys.ArrowUp||keys.KeyW; jump = jb && !p.jumpLatch; if(!jb) p.jumpLatch=false; else p.jumpLatch=true;
+    sling = keys.KeyF && !p.kb2; p.kb2=keys.KeyF;
+  } else if(p.pad!=null){
+    const gp=pads()[p.pad];
+    if(gp){
+      const ax=gp.axes[0]||0; if(ax<-0.3) mx-=1; if(ax>0.3) mx+=1;
+      if(padPressed(gp,14)) mx-=1; if(padPressed(gp,15)) mx+=1;
+      jump = padEdge(p.pad,0,gp);                 // A = jump
+      var e2=padEdge(p.pad,2,gp), e5=padEdge(p.pad,5,gp); sling = e2||e5; // X or RB = sling (both edges evaluated so neither prev-state is skipped)
+    }
+  }
+  return {mx:Math.max(-1,Math.min(1,mx)), jump, sling};
+}
+
+/* ---------- lifecycle ---------- */
+function reset(keepPlayers){
+  stones=[]; enemies=[]; spears=[]; shocks=[]; parts=[]; floats=[]; confetti=[]; boss=null;
+  stage=0; shake=0; flash=0; slow=1; declare={t:0,txt:''}; winT=0; score=0; banner={t:0,txt:''};
+  if(!keepPlayers) players=[];
+  players.forEach((p,i)=>{ p.x=ARENA_L+120+i*120; p.y=GY; p.vx=0; p.vy=0; p.ground=true; p.hp=3; p.iframe=0; p.down=false; p.reviveBy=0; p.slingCd=0; });
+  startStage(1);
+}
+function startStage(n){
+  stage=n; enemies=[]; spears=[]; shocks=[]; boss=null;
+  const pc=Math.max(1,players.length);
+  if(n===1){
+    banner={t:2.4,txt:'The Pasture — drive off the wolves!'}; S.stage();
+    const count=3+pc*2;
+    for(let i=0;i<count;i++) spawnWolf(i<count/2? -1:1, 0.4+i*0.25);
+  } else if(n===2){
+    banner={t:2.8,txt:'The Lion! — it seized a lamb  (1 Samuel 17:34)'}; S.stage();
+    spawnBeast('lion', pc);
+  } else if(n===3){
+    banner={t:2.8,txt:'The Bear! — stand your ground together'}; S.stage();
+    spawnBeast('bear', pc);
+  } else if(n===4){
+    banner={t:3,txt:'The Valley of Elah — declare the Word of the LORD!'}; S.stage();
+    boss={ x:W-230, y:GY, hp:99, maxhp:99, state:'roar', stT:0, cd:2.0, phase:1, atk:'', thrust:0, stag:0, down:false, fall:0, taunt:'', tauntT:0, scene:'declare', expose:false };
+    declareUI={ round:0, sel:1, msg:'', msgT:0, spoke:-1, flash:0 }; players.forEach(p=>{ p.stones=5; p.down=false; p.hp=3; p.reviveBy=0; });  // everyone stands fresh for the great battle
+  }
+}
+function spawnWolf(side, delay){
+  enemies.push({ type:'wolf', x: side<0? ARENA_L-40 : ARENA_R+40, y:GY, vx:0, hp:1, dir:side<0?1:-1, hurt:0, delay:delay||0, w:52,h:34 });
+}
+function spawnBeast(type, pc){ const lion=type==='lion'; const hp=(lion?4:6)+pc*2;
+  enemies.push({ type:type, x:ARENA_R+60, y:GY, vx:0, hp:hp, maxhp:hp, dir:-1, hurt:0, delay:0.4,
+    w: lion?82:98, h: lion?48:62, state:'approach', stT:0 });
+}
+
+/* ---------- loop ---------- */
+let last=performance.now();
+function loop(now){ let rdt=Math.min(0.033,(now-last)/1000); last=now;
+  if(state==='play') update(rdt);
+  else { reconnectPads(); if(state==='title') pollJoins(); checkPadStart();
+    if(startCountdown>0){ startCountdown-=rdt; if(startCountdown<=0){ startCountdown=0; startGame(); } }
+    renderSlots(); }
+  render(); requestAnimationFrame(loop);
+}
+function livePlayers(){ return players.filter(p=>!p.down && !p.inactive); }
+
+/* ===== Goliath scene: "Declare the Word" (1 Sam 17:45) + "The Five Smooth Stones" (17:40, 17:49) ===== */
+const DECLARE_ROUNDS=[
+  { ctx:'“Thou comest to me with a sword, and with a spear, and with a shield…”', q:'but I come to thee in the name of the', opts:['LORD of hosts','mighty sword','king of gold'], correct:0, say:'But I come to thee in the name of the LORD of hosts,' },
+  { ctx:'“…in the name of the LORD of hosts,”', q:'the God of the', opts:['rivers of gold','armies of Israel','towers of stone'], correct:1, say:'the God of the armies of Israel,' },
+  { ctx:'“…the God of the armies of Israel,”', q:'whom thou hast', opts:['defied','praised','blessed'], correct:0, say:'whom thou hast defied.' }
+];
+function speak(txt){ try{ if(!('speechSynthesis' in window))return; speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(txt); u.rate=0.9; speechSynthesis.speak(u); }catch(e){} }
+function kbEdge(code){ const now=!!keys[code], was=prevKeys['k'+code]; prevKeys['k'+code]=now; return now&&!was; }
+function menuInput(){ let left=false,right=false,ok=false;   // any player can drive the Word selection (stick/D-pad to move, Ⓐ/Space to choose)
+  if(kbEdge('ArrowLeft')||kbEdge('KeyA')) left=true; if(kbEdge('ArrowRight')||kbEdge('KeyD')) right=true; if(kbEdge('Enter')||kbEdge('Space')) ok=true;   // confirm = Ⓐ/Space only (NOT F — F is the sling, so a held confirm can no longer fling a stone into the fight)
+  const gs=pads(); for(let i=0;i<gs.length&&i<8;i++){ const gp=gs[i]; if(!gp) continue;
+    if(padEdge('mL'+i,14,gp)) left=true; if(padEdge('mR'+i,15,gp)) right=true;
+    const ax=gp.axes[0]||0, k='ms'+i, was=prevPad[k]||0, now=ax<-0.5?-1:ax>0.5?1:0; prevPad[k]=now; if(now!==was){ if(now<0)left=true; if(now>0)right=true; }
+    if(padEdge('mA'+i,0,gp)) ok=true;
+  }
+  return {left,right,ok};
+}
+function updateDeclare(rdt){
+  const D=declareUI, R=DECLARE_ROUNDS[D.round];
+  if(D.spoke!==D.round){ D.spoke=D.round; D.flash=0; speak('Choose: '+R.opts.map((o,i)=>(i+1)+', '+o).join('. ')); }
+  if(D.msgT>0){ D.msgT-=rdt; if(D.msgT<=0) D.msg=''; }
+  const inp=menuInput();
+  if(inp.left){ D.sel=(D.sel+2)%3; S.sling(); }
+  if(inp.right){ D.sel=(D.sel+1)%3; S.sling(); }
+  if(inp.ok){
+    if(D.sel===R.correct){ speak(R.say); S.revive(); floatTxt(640,300,'Yes!','#8fd18f'); D.round++;
+      if(D.round>=DECLARE_ROUNDS.length){ boss.scene='fight'; boss.state='roar'; boss.stT=0; boss.cd=1.6; declare={t:1.8,txt:'In the name of the LORD!'}; slow=0.3; banner={t:0,txt:''};
+        players.forEach(p=>{ p.stones=5; p.kb2=true; p.jumpLatch=true; p.slingCd=0.4; if(p.pad!=null){ prevPad[p.pad+':0']=true; prevPad[p.pad+':2']=true; prevPad[p.pad+':5']=true; } });   // prime held-confirm buttons as already-down so the first fight frame has no stray jump/sling
+        setTimeout(()=>speak('Thou comest to me with a sword and a spear, but I come to thee in the name of the LORD of hosts, the God of the armies of Israel, whom thou hast defied.'),300);
+      } else { D.sel=1; }
+    } else { D.msg='Not that one — listen and try again'; D.msgT=2.2; shake=Math.max(shake,6); speak('Try again. '+R.q); }
+  }
+}
+function refillStones(){ players.forEach(p=>{ if(!p.inactive) p.stones=5; }); floatTxt(640,GY-200,'Gather five smooth stones from the brook!','#9fd0e0'); }
+
+function update(rdt){
+  t+=rdt;
+  if(declare.t>0){ declare.t-=rdt; if(declare.t<=0.9) slow=Math.min(1,slow+rdt*1.6); }
+  if(banner.t>0) banner.t-=rdt;
+  if(winT>0){ winT-=rdt; if(winT<=0){ winGame(); return; } }
+  const dt=rdt*slow;
+
+  // Goliath Part A: "Declare the Word" — a Scripture moment; combat is frozen until they speak it
+  if(boss && boss.scene==='declare'){
+    players.forEach(p=>{ p.vx=0; if(p.iframe>0)p.iframe-=rdt; });
+    updateDeclare(rdt);
+    for(const pt of parts){ pt.vy+=1400*dt; pt.x+=pt.vx*dt; pt.y+=pt.vy*dt; pt.life-=rdt; } parts=parts.filter(q=>q.life>0);
+    for(const f of floats){ f.y-=rdt*40; f.life-=rdt; } floats=floats.filter(f=>f.life>0);
+    if(shake>0) shake=Math.max(0,shake-rdt*40); if(flash>0) flash=Math.max(0,flash-rdt*1.6);
+    return;
+  }
+
+  // players
+  players.forEach(p=>{
+    if(p.iframe>0) p.iframe-=rdt;
+    if(p.slingCd>0) p.slingCd-=rdt;
+    p.t+=rdt;
+    if(p.down){
+      p.y=GY; p.vy=0; p.ground=true;
+      // revive: a living teammate standing within 70px for 1.4s
+      const helper=livePlayers().find(q=>q!==p && q.ground && Math.abs(q.x-p.x)<70);
+      if(helper){ p.reviveBy+=rdt; if(p.reviveBy>=1.4){ p.down=false; p.hp=2; p.iframe=1.2; p.reviveBy=0; S.revive(); floatTxt(p.x,p.y-90,'Revived!',p.col.hi); } }
+      else p.reviveBy=Math.max(0,p.reviveBy-rdt*1.5);
+      return;
+    }
+    const inp=readInput(p);
+    p.vx=inp.mx*SPD; if(inp.mx) p.face=inp.mx<0?-1:1;
+    if(!p.ground) p.vy+=GRAV*dt;
+    if(inp.jump && p.ground){ p.vy=JUMP; p.ground=false; S.jump(); puff(p.x,GY,6,'#d8c6a0'); }
+    p.x+=p.vx*dt; p.y+=p.vy*dt;
+    if(p.y>=GY){ if(!p.ground) puff(p.x,GY,7,'#d8c6a0'); p.y=GY; p.vy=0; p.ground=true; }
+    p.x=Math.max(ARENA_L,Math.min(ARENA_R,p.x));
+    if(inp.mx&&p.ground) p.anim+=dt*11; else p.anim*=0.8;
+    // sling
+    if(inp.sling && p.slingCd<=0){
+      const fight=boss&&boss.scene==='fight'&&!boss.down;
+      if(!(fight && (p.stones||0)<=0)){           // in the Goliath fight each throw spends one of your five smooth stones
+        p.slingCd=0.35;
+        let tx=p.x+p.face*400, ty=p.y-90;
+        const tgt = fight? {x:boss.x,y:GY-346} : (boss&&!boss.down? {x:boss.x,y:GY-220} : nearestEnemy(p.x));  // the fight auto-aims at the forehead
+        if(tgt){ tx=tgt.x; ty=tgt.y; }
+        const dx=tx-p.x, dy=(ty)-(p.y-80), d=Math.max(60,Math.hypot(dx,dy)), sp=fight?Math.max(1200,d*1.25):Math.max(900,d*1.2);
+        stones.push({x:p.x+p.face*18,y:p.y-80,vx:dx/d*sp,vy:fight?dy/d*sp:dy/d*sp-120,life:1.6,col:p.col.hi,trail:[],fight:fight,arm:fight?0.05:0,exposeThrow:!!(fight&&boss.expose)});
+        if(dx) p.face=dx<0?-1:1;
+        if(fight){ p.stones--; if((p.stones||0)<=0){ p.stones=5; floatTxt(p.x,GY-200,'Five smooth stones!','#9fd0e0'); } }   // each shepherd's sling stays alive: refill the instant YOUR five are spent (no shared dead-button trap)
+        S.sling(); shake=Math.max(shake,4);
+      }
+    }
+  });
+
+  // stones
+  for(const s of stones){ s.trail.push({x:s.x,y:s.y}); if(s.trail.length>6)s.trail.shift();
+    const sdt=s.fight?rdt:dt;                          // fight stones fly at real speed so an on-prompt sling stays true even through the opening slow-mo roar (bullet-time throw)
+    s.vy+=GRAV*(s.fight?0.03:0.18)*sdt; s.x+=s.vx*sdt; s.y+=s.vy*sdt; s.life-=rdt;
+    if(s.y>GY+4||s.x<0||s.x>W){ s.dead=true; }
+    // hit enemies
+    for(const e of enemies){ if(e.dead||e.delay>0) continue; if(Math.abs(s.x-e.x)<e.w*0.6 && Math.abs(s.y-(e.y-e.h/2))<e.h*0.8){ s.dead=true; e.hp--; e.hurt=.2; shake=Math.max(shake,5); S.enemy(); puff(s.x,s.y,7,'#e8a');
+      if(e.hp<=0){ e.dead=true; score+=20; floatTxt(e.x,e.y-40,'+20','#f2c14e'); puff(e.x,e.y-16,12,'#caa'); } break; } }
+    // hit boss — only a FOREHEAD shot while it is EXPOSED fells him (1 Sam 17:49); otherwise it clanks off helmet/armour
+    if(boss&&boss.scene==='fight'&&!boss.down&&!s.dead){
+      if(s.arm>0){ s.arm-=rdt; }                       // brief arm window so a point-blank throw separates before it can resolve
+      else { const dxp=Math.abs(s.x-boss.x);
+        const head=(dxp<70 && s.y>GY-392 && s.y<GY-292);
+        const body=(!s.fight && dxp<78 && s.y>=GY-292 && s.y<GY-40);   // auto-aimed fight stones fly flat and bypass the armour column, so a WELL-TIMED sling always reaches the forehead from anywhere in the arena
+        if(head||body){ s.dead=true;
+          if(head && (boss.expose||s.exposeThrow)){ shake=Math.max(shake,16); flash=Math.max(flash,.5); puff(s.x,s.y,18,'#f1d99b'); floatTxt(s.x,s.y-12,'FOREHEAD!','#f1d99b'); score+=100; defeatBoss(); }   // credit a throw slung while the window was open, even as it lands
+          else { shake=Math.max(shake,5); S.enemy(); puff(s.x,s.y,8,'#cfd3d6'); floatTxt(s.x,s.y-10, head?'He ducked behind his helmet!':'His armour turned it!','#cfd3d6'); }
+        } }
+    }
+  }
+  stones=stones.filter(s=>!s.dead && s.life>0);
+
+  updateEnemies(dt,rdt);
+  if(boss) updateBoss(rdt,dt);
+
+  // spears
+  for(const sp of spears){ sp.vy+=GRAV*0.22*dt; sp.x+=sp.vx*dt; sp.y+=sp.vy*dt; sp.life-=rdt;
+    if(sp.y>GY){ sp.dead=true; puff(sp.x,GY,5,'#987'); }
+    for(const p of livePlayers()){ if(p.iframe<=0 && Math.abs(sp.x-p.x)<22 && Math.abs(sp.y-(p.y-50))<44){ sp.dead=true; hurt(p,Math.sign(sp.vx)); } } }
+  spears=spears.filter(s=>!s.dead && s.life>0);
+  // shocks
+  for(const sk of shocks){ sk.px=sk.x; sk.x+=sk.dir*560*dt;
+    for(const p of livePlayers()){ const crossed=(sk.px-p.x)*(sk.x-p.x)<=0; if(crossed){ if(p.ground){ if(p.iframe<=0) hurt(p,sk.dir);} else if(!sk['g'+p.idx]){ sk['g'+p.idx]=1; score+=5; floatTxt(p.x,p.y-90,'Nimble!','#9fd0e0'); } } } }
+  shocks=shocks.filter(sk=>sk.x>-60&&sk.x<W+60);
+
+  // particles / floats / confetti
+  for(const pt of parts){ pt.vy+=1400*dt; pt.x+=pt.vx*dt; pt.y+=pt.vy*dt; pt.life-=rdt; }
+  parts=parts.filter(p=>p.life>0);
+  for(const f of floats){ f.y-=rdt*40; f.life-=rdt; }
+  floats=floats.filter(f=>f.life>0);
+  for(const cf of confetti){ cf.vy+=260*dt; cf.x+=cf.vx*dt; cf.y+=cf.vy*dt; cf.r+=cf.vr*dt; cf.life-=rdt; }
+  confetti=confetti.filter(c=>c.life>0&&c.y<H+40);
+  if(shake>0) shake=Math.max(0,shake-rdt*40);
+  if(flash>0) flash=Math.max(0,flash-rdt*1.6);
+
+  // allow late joiners before the boss; resume any reconnected controllers
+  reconnectPads();
+  if(stage<=3) pollJoins();
+
+  // stage progression: clear a combat stage (wolves/lion/bear) -> advance toward Goliath
+  if(stage>=1 && stage<=3 && enemies.length===0 && banner.t<=0){ startStage(stage+1); }
+
+  // lose: everyone (still connected) down
+  const roster=players.filter(p=>!p.inactive);
+  if(roster.length>0 && roster.every(p=>p.down)) loseGame();
+}
+
+function nearestEnemy(px){ let best=null,bd=1e9; for(const e of enemies){ if(e.dead||e.delay>0) continue; const d=Math.abs(e.x-px); if(d<bd){bd=d;best=e;} } return best?{x:best.x,y:best.y-20}:null; }
+
+function updateEnemies(dt,rdt){
+  for(const e of enemies){ if(e.dead) continue;
+    if(e.delay>0){ e.delay-=rdt; continue; }
+    if(e.hurt>0) e.hurt-=rdt;
+    const tgt=livePlayers().reduce((a,p)=>{ const d=Math.abs(p.x-e.x); return d<a.d?{p,d}:a; },{p:null,d:1e9});
+    if(e.type==='wolf'){
+      if(tgt.p){ e.dir=tgt.p.x>e.x?1:-1; e.x+=e.dir*170*dt; }
+    } else { // lion / bear mini-boss: approach -> windup(telegraph) -> charge(JUMP to dodge) -> rest(sling opening)
+      const fast=e.type==='lion'; e.stT+=rdt;
+      if(e.state==='approach'){ if(tgt.p){ e.dir=tgt.p.x>e.x?1:-1; e.x+=e.dir*(fast?120:90)*dt; if(Math.abs(tgt.p.x-e.x)<440 && e.stT>0.5){ e.state='windup'; e.stT=0; } } }
+      else if(e.state==='windup'){ if(tgt.p) e.dir=tgt.p.x>e.x?1:-1; if(e.stT>(fast?0.5:0.7)){ e.state='charge'; e.stT=0; S.enemy(); } }
+      else if(e.state==='charge'){ e.x+=e.dir*(fast?560:430)*dt; if((tgt.p && Math.abs(tgt.p.x-e.x)<e.w*0.4) || e.x<=ARENA_L-28 || e.x>=ARENA_R+28 || e.stT>1.3){ e.state='rest'; e.stT=0; } }   // committed lunge: plow all the way to the shepherd (or the arena wall), not a fixed stop that whiffs short
+      else { if(e.stT>(fast?0.8:1.1)){ e.state='approach'; e.stT=0; } }
+    }
+    e.x=Math.max(ARENA_L-30,Math.min(ARENA_R+30,e.x));
+    const dangerous=(e.type==='wolf')||(e.state==='charge');   // beasts only hurt while charging — sling them safely during the rest
+    for(const p of livePlayers()){ if(dangerous && p.iframe<=0 && Math.abs(p.x-e.x)<e.w*0.55 && p.ground){ hurt(p,e.dir); } }
+  }
+  enemies=enemies.filter(e=>!e.dead);
+}
+
+function updateBoss(rdt,dt){ const G=boss; if(G.down){ if(G.fall<1.3) G.fall+=rdt*1.6; return; }
+  if(G.tauntT>0){ G.tauntT-=rdt; if(G.tauntT<=0) G.taunt=''; }
+  if(G.stag>0) G.stag-=rdt;
+  G.stT+=rdt;
+  const pc=Math.max(1,players.length);
+  const target=livePlayers().reduce((a,p)=>{ const d=Math.abs(p.x-G.x); return d<a.d?{p,d}:a; },{p:null,d:1e9}).p;
+  switch(G.state){
+    case 'roar': if(G.stT>0.9){ G.state='idle'; G.stT=0; G.cd=1.4; } break;
+    case 'idle': G.cd-=rdt; if(G.cd<=0){ if(Math.random()<0.55){ G.state='taunt'; G.stT=0; G.taunt=['Come to me!','Am I a dog?','I defy the armies of Israel!'][Math.floor(Math.random()*3)]; G.tauntT=1.9; } else { G.atk=(Math.random()<0.5?'spear':'stomp'); G.state='windup'; G.stT=0; } } break;
+    case 'taunt': if(G.stT>1.7){ G.state='idle'; G.stT=0; G.cd=1.3; } break;   // head thrown back -> forehead EXPOSED (sling now!)
+    case 'windup': if(G.stT>(G.atk==='spear'?0.6:0.8)){ G.state='attack'; G.stT=0; exec(); } break;
+    case 'attack': if(G.stT>0.26){ G.state='recover'; G.stT=0; G.open=1.2; } break;
+    case 'recover': if(G.stT>G.open){ G.state='idle'; G.stT=0; G.cd=1.6; } break;
+  }
+  G.expose=(G.state==='roar'||G.state==='taunt'||G.state==='recover'||G.stag>0);
+  function exec(){
+    if(G.atk==='stomp'){ shake=Math.max(shake,12); flash=Math.max(flash,.3); S.thud();
+      shocks.push({x:G.x,dir:-1,px:G.x}); shocks.push({x:G.x,dir:1,px:G.x});
+      for(let i=0;i<14;i++) parts.push({x:G.x+(Math.random()-.5)*80,y:GY,vx:(Math.random()-.5)*260,vy:-Math.random()*200-20,life:.5,c:'#c9ac5c',s:3});
+    } else { // spear toward nearest player
+      S.thud(); const tx=target?target.x:(G.x-300); const dir=tx<G.x?-1:1;
+      const dvx=(tx-G.x), d=Math.max(80,Math.abs(dvx));
+      spears.push({x:G.x-40,y:GY-120,vx:dir*Math.max(360,Math.min(680,d*1.8)),vy:-40,life:3});
+    }
+  }
+}
+function defeatBoss(){ const G=boss; G.down=true; G.fall=0; G.taunt=''; shocks=[]; spears=[]; G.thrust=0;
+  slow=0.2; declare={t:1.7,txt:'In the name of the LORD!'}; winT=2.2; shake=Math.max(shake,22); flash=Math.max(flash,.8); S.win();
+  for(let i=0;i<70;i++) confetti.push({x:G.x+(Math.random()-.5)*280,y:GY-320-Math.random()*120,vx:(Math.random()-.5)*160,vy:Math.random()*80+20,c:['#e3bd5a','#f1d99b','#c98a4b','#eadfc6'][i%4],s:Math.random()*6+3,r:Math.random()*6,vr:(Math.random()-.5)*8,life:3});
+}
+
+function hurt(p,dir){ if(p.iframe>0||p.down) return; p.hp--; p.iframe=1.1; p.vy=-320; p.ground=false; p.x+=(dir||0)*8;
+  shake=Math.max(shake,10); flash=Math.max(flash,.35); S.hit(); puff(p.x,p.y-50,9,'#e06a6a');
+  if(p.hp<=0){ p.down=true; p.hp=0; p.reviveBy=0; S.down(); floatTxt(p.x,p.y-90,'Down! help me','#e88'); } }
+function puff(wx,wy,n,c){ for(let i=0;i<n;i++) parts.push({x:wx+(Math.random()-.5)*20,y:wy,vx:(Math.random()-.5)*160,vy:-Math.random()*120,life:.42,c:c||'#d8c6a0',s:3}); }
+function floatTxt(wx,wy,txt,c){ floats.push({x:wx,y:wy,txt,c,life:1.1}); }
+
+/* ---------- render ---------- */
+function render(){
+  const sx=(Math.random()-.5)*shake, sy=(Math.random()-.5)*shake;
+  x.clearRect(0,0,W,H); drawSky();
+  x.save(); x.translate(sx,sy);
+  drawHills(); drawGround(); drawWalls();
+  // enemies
+  for(const e of enemies){ if(e.delay>0) continue; if(e.type==='lion')drawLion(e); else if(e.type==='bear')drawBear(e); else drawWolf(e); }
+  if(boss) drawGoliath(boss);
+  if(boss&&boss.scene==='fight'&&!boss.down&&boss.expose){ const hx=boss.x, hy=GY-346, pulse=3+Math.sin(t*10)*2;   // forehead reticle while exposed
+    x.strokeStyle='rgba(255,210,74,'+(.55+Math.sin(t*10)*.3)+')'; x.lineWidth=3; x.beginPath(); x.arc(hx,hy,22+pulse,0,7); x.stroke();
+    x.strokeStyle='#ffd24a'; x.lineWidth=2; x.beginPath(); x.moveTo(hx-32,hy); x.lineTo(hx-16,hy); x.moveTo(hx+16,hy); x.lineTo(hx+32,hy); x.moveTo(hx,hy-32); x.lineTo(hx,hy-16); x.stroke(); }
+  // shocks
+  for(const sk of shocks){ x.strokeStyle='rgba(201,172,92,.9)'; x.lineWidth=5; x.lineCap='round'; x.beginPath(); x.moveTo(sk.x-10,GY+2); x.lineTo(sk.x,GY-20); x.lineTo(sk.x+10,GY+2); x.stroke(); } x.lineCap='butt';
+  // spears
+  for(const sp of spears){ x.save(); x.translate(sp.x,sp.y); x.rotate(Math.atan2(sp.vy,sp.vx)); x.fillStyle='#6b4a2b'; x.fillRect(-18,-2,34,4); x.fillStyle='#cfd3d6'; x.beginPath(); x.moveTo(16,-6); x.lineTo(28,0); x.lineTo(16,6); x.fill(); x.restore(); }
+  // stones
+  for(const s of stones){ for(let i=0;i<s.trail.length;i++){ const tp=s.trail[i]; x.globalAlpha=i/s.trail.length*.5; dot(tp.x,tp.y,6*(i/s.trail.length)+2,s.col);} x.globalAlpha=1; dot(s.x,s.y,7,'#efe3c8'); dot(s.x,s.y,4,'#fff'); }
+  // players
+  for(const p of players){ if(p.inactive) continue; drawDavid(p); }
+  // particles
+  for(const pt of parts){ x.globalAlpha=Math.max(0,Math.min(1,pt.life*2)); dot(pt.x,pt.y,pt.s,pt.c);} x.globalAlpha=1;
+  for(const cf of confetti){ x.save(); x.translate(cf.x,cf.y); x.rotate(cf.r); x.fillStyle=cf.c; x.fillRect(-cf.s/2,-cf.s/2,cf.s,cf.s*.6); x.restore(); }
+  for(const f of floats){ x.globalAlpha=Math.max(0,Math.min(1,f.life*1.3)); x.fillStyle=f.c; x.font='800 18px "Fraunces",serif'; x.textAlign='center'; x.fillText(f.txt,f.x,f.y);} x.globalAlpha=1;
+  x.restore();
+  if(flash>0){ x.fillStyle='rgba(255,255,255,'+flash+')'; x.fillRect(0,0,W,H); }
+  if(declare.t>0){ const a=Math.min(1,declare.t*2); x.globalAlpha=a; x.textAlign='center'; x.font='italic 600 '+(46+(1-Math.min(1,declare.t/1.7))*12)+'px "Fraunces",serif'; x.fillStyle='#fff'; x.shadowColor='#e3bd5a'; x.shadowBlur=24; x.fillText(declare.txt,W/2,H*0.34); x.shadowBlur=0; x.globalAlpha=1; }
+  if(state==='play' && boss && boss.scene==='declare') drawDeclare();
+  if(state==='play') drawHUD();
+  vignette();
+}
+function dot(px,py,r,c){ x.fillStyle=c; x.beginPath(); x.arc(px,py,r,0,7); x.fill(); }
+function wrap(txt,cx,y,maxw,lh){ const words=String(txt).split(' '); let line='',yy=y; for(const w of words){ const t2=line+w+' '; if(x.measureText(t2).width>maxw && line){ x.fillText(line,cx,yy); line=w+' '; yy+=lh; } else line=t2; } x.fillText(line,cx,yy); }
+function drawDeclare(){
+  const D=declareUI; if(!D||D.round>=DECLARE_ROUNDS.length) return; const R=DECLARE_ROUNDS[D.round];
+  x.fillStyle='rgba(8,12,24,.66)'; x.fillRect(0,0,W,H); x.textAlign='center';
+  x.fillStyle='#e3bd5a'; x.font='800 15px "Inter",sans-serif'; x.fillText('DECLARE THE WORD OF THE LORD  ·  1 Samuel 17:45',W/2,66);
+  if(R.ctx){ x.fillStyle='#cfc3a8'; x.font='italic 22px "Fraunces",serif'; wrap(R.ctx,W/2,118,820,30); }
+  x.fillStyle='#fff'; x.font='600 34px "Fraunces",serif'; wrap('“… '+R.q+'  ______ ”',W/2,220,1000,40);
+  const cw=300, gap=28, total=3*cw+2*gap, x0=W/2-total/2, cy=300;
+  for(let i=0;i<3;i++){ const cx=x0+i*(cw+gap), sel=(i===D.sel);
+    x.fillStyle=sel?'rgba(243,217,139,.96)':'rgba(255,255,255,.1)'; rr(cx,cy,cw,96,16); x.fill();
+    if(sel){ x.strokeStyle='#fff'; x.lineWidth=4; rr(cx,cy,cw,96,16); x.stroke(); }
+    x.fillStyle=sel?'#7a5a12':'rgba(255,255,255,.55)'; x.textAlign='left'; x.font='800 15px "Inter",sans-serif'; x.fillText((i+1)+'',cx+18,cy+30);
+    x.textAlign='center'; x.fillStyle=sel?'#241a12':'#f4ecda'; x.font='800 25px "Inter",sans-serif'; wrap(R.opts[i],cx+cw/2,cy+58,cw-28,28);
+  }
+  if(D.msg){ x.fillStyle='#ffb0a0'; x.font='800 italic 23px "Fraunces",serif'; x.fillText(D.msg,W/2,462); }
+  x.fillStyle='rgba(255,255,255,.82)'; x.font='700 16px "Inter",sans-serif'; x.fillText('◀ ▶ / stick to choose   ·   Ⓐ or Space to speak it',W/2,516);
+}
+function drawSky(){ const g=x.createLinearGradient(0,0,0,GY+40); g.addColorStop(0,'#9fc0dc'); g.addColorStop(.55,'#e7cf9f'); g.addColorStop(1,'#f6d9a6'); x.fillStyle=g; x.fillRect(0,0,W,H);
+  const sg=x.createRadialGradient(W*0.74,GY-200,10,W*0.74,GY-200,360); sg.addColorStop(0,'rgba(255,245,210,.9)'); sg.addColorStop(1,'rgba(255,245,210,0)'); x.fillStyle=sg; x.fillRect(0,0,W,H);
+  x.fillStyle='rgba(255,255,255,.5)'; cloud(220,110,70); cloud(760,80,54); cloud(1080,150,60); }
+function cloud(cx,cy,r){ x.beginPath(); x.arc(cx,cy,r,0,7); x.arc(cx+r,cy+6,r*.8,0,7); x.arc(cx-r,cy+8,r*.7,0,7); x.fill(); }
+function drawHills(){ layer(.0,'#cdb87a',GY-10,70); layer(.0,'#bda45f',GY+6,52); }
+function layer(par,col,baseY,amp){ x.fillStyle=col; x.beginPath(); x.moveTo(0,H); for(let i=0;i<=W+40;i+=40){ const y=baseY-Math.sin(i*0.004)*amp-Math.sin(i*0.011)*amp*.4; x.lineTo(i,y);} x.lineTo(W,H); x.closePath(); x.fill(); }
+function drawGround(){ x.fillStyle='#b89a52'; x.fillRect(0,GY,W,H-GY); x.fillStyle='#c9ac5c'; x.fillRect(0,GY,W,10); x.fillStyle='#a98a46'; for(let i=0;i<30;i++){ x.fillRect((i*90)%W,GY+16+(i%3)*6,5,10);} }
+function drawWalls(){ rock(ARENA_L-46,180); rock(ARENA_R+6,196); }
+function rock(px,h){ const top=GY-h; x.fillStyle='#6b5236'; x.beginPath(); x.moveTo(px,GY); x.lineTo(px+8,top+22); x.lineTo(px+26,top); x.lineTo(px+46,top+18); x.lineTo(px+60,top+6); x.lineTo(px+68,GY); x.closePath(); x.fill(); x.fillStyle='rgba(0,0,0,.16)'; x.fillRect(px+46,top+14,22,h-14); }
+function vignette(){ const g=x.createRadialGradient(W/2,H/2,H*0.42,W/2,H/2,H*0.95); g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(10,15,30,.5)'); x.fillStyle=g; x.fillRect(0,0,W,H); }
+
+function drawDavid(p){
+  const feet=p.y, blink=p.iframe>0&&Math.floor(t*14)%2===0;
+  x.save(); x.translate(p.x,feet);
+  x.globalAlpha=.26; x.fillStyle='#3c280a'; x.beginPath(); x.ellipse(0,2,26,7,0,0,7); x.fill(); x.globalAlpha=blink?0.4:1;
+  if(p.down){ // kneeling, calling for help
+    x.fillStyle=p.col.tunic; x.beginPath(); x.roundRect(-16,-34,32,30,8); x.fill();
+    x.fillStyle='#e8b584'; x.beginPath(); x.arc(0,-46,13,0,7); x.fill();
+    x.fillStyle='#b4542f'; x.beginPath(); x.arc(0,-52,13,Math.PI,0); x.fill();
+    // revive ring
+    if(p.reviveBy>0){ x.strokeStyle=p.col.hi; x.lineWidth=4; x.beginPath(); x.arc(0,-30,34,-1.57,-1.57+(p.reviveBy/1.4)*6.283); x.stroke(); }
+    x.restore(); x.globalAlpha=1; return;
+  }
+  const moving=p.ground&&Math.abs(p.vx)>5, rs=Math.sin(p.anim), bob=p.ground?(moving?Math.abs(rs)*5:Math.sin(p.t*2.4)*1.6):0;
+  x.scale(p.face,1); x.translate(0,-bob);
+  // legs
+  x.strokeStyle='#7a4a28'; x.lineWidth=9; x.lineCap='round';
+  const st=moving?Math.sin(p.anim)*10:0;
+  x.beginPath(); x.moveTo(-5,-54); x.lineTo(-5+st,-8); x.moveTo(5,-54); x.lineTo(5-st,-8); x.stroke();
+  // tunic
+  x.fillStyle=p.col.tunic; x.beginPath(); x.roundRect(-18,-104,36,54,8); x.fill();
+  x.fillStyle=p.col.hi; x.fillRect(-18,-78,36,5);
+  x.fillStyle='#c9a24b'; x.fillRect(-18,-58,36,5);
+  // sling arm
+  x.strokeStyle='#e8b584'; x.lineWidth=7; x.beginPath(); x.moveTo(8,-96); x.lineTo(20,-86+Math.sin(p.t*0.02)*3); x.stroke();
+  // head
+  x.fillStyle='#e8b584'; x.beginPath(); x.arc(0,-112,13,0,7); x.fill();
+  x.fillStyle='#b4542f'; x.beginPath(); x.arc(0,-118,13,Math.PI*1.02,Math.PI*2.02); x.fill(); x.fillRect(-13,-118,5,8);
+  x.fillStyle='#241a12'; x.fillRect(5,-114,2,3);
+  x.restore(); x.globalAlpha=1;
+  // name tag
+  x.fillStyle=p.col.hi; x.font='800 12px "Inter",sans-serif'; x.textAlign='center'; x.globalAlpha=.85; x.fillText(p.col.name,p.x,feet-150); x.globalAlpha=1;
+}
+function drawWolf(e){ x.save(); x.translate(e.x,e.y); if(e.dir>0)x.scale(-1,1); if(e.hurt>0&&Math.floor(t*30)%2)x.globalAlpha=.5;
+  x.fillStyle='rgba(0,0,0,.16)'; x.beginPath(); x.ellipse(0,2,26,5,0,0,7); x.fill();
+  x.fillStyle='#6f6f78'; x.beginPath(); x.roundRect(-20,-30,40,20,8); x.fill();
+  x.fillStyle='#5a5a63'; x.fillRect(-16,-12,6,10); x.fillRect(12,-12,6,10);
+  x.fillStyle='#7a7a84'; x.beginPath(); x.arc(-22,-26,9,0,7); x.fill();
+  x.fillStyle='#5a5a63'; x.beginPath(); x.moveTo(-26,-32); x.lineTo(-22,-38); x.lineTo(-18,-31); x.fill();
+  x.fillStyle='#e0b040'; x.fillRect(-26,-27,2,2); x.restore(); x.globalAlpha=1; }
+function beastBar(e){ if(e.hp<=0)return; const w=96, bx=e.x-w/2, by=GY-e.h-30;
+  x.fillStyle='rgba(0,0,0,.35)'; rr(bx,by,w,8,4); x.fill(); x.fillStyle=e.type==='lion'?'#e0a93a':'#8a5a3a'; rr(bx,by,w*Math.max(0,e.hp)/e.maxhp,8,4); x.fill(); }
+function drawLion(e){ x.save(); x.translate(e.x,e.y); const cr=e.state==='windup'?Math.min(7,e.stT*20):0; if(e.dir>0)x.scale(-1,1); if(e.hurt>0&&Math.floor(t*30)%2)x.globalAlpha=.5;
+  x.fillStyle='rgba(0,0,0,.18)'; x.beginPath(); x.ellipse(0,2,40,6,0,0,7); x.fill(); x.translate(0,cr);
+  x.fillStyle='#caa060'; x.beginPath(); x.roundRect(-34,-40,60,30,12); x.fill();
+  x.fillStyle='#b98a47'; x.fillRect(-26,-14,9,14); x.fillRect(16,-14,9,14);
+  x.strokeStyle='#8a5a2b'; x.lineWidth=3; x.beginPath(); x.moveTo(24,-34); x.lineTo(38,-42); x.stroke();
+  x.fillStyle='#8a5a2b'; x.beginPath(); x.arc(-34,-34,16,0,7); x.fill();
+  x.fillStyle='#d9b473'; x.beginPath(); x.arc(-34,-34,10,0,7); x.fill();
+  x.fillStyle='#241a12'; x.fillRect(-40,-37,2,3); x.fillRect(-32,-37,2,3);
+  if(e.state==='windup'&&Math.floor(t*10)%2){ x.strokeStyle='#ff5a3c'; x.lineWidth=3; x.beginPath(); x.arc(-34,-28,30,0,7); x.stroke(); }
+  x.restore(); x.globalAlpha=1; beastBar(e); }
+function drawBear(e){ x.save(); x.translate(e.x,e.y); const cr=e.state==='windup'?Math.min(7,e.stT*16):0; if(e.dir>0)x.scale(-1,1); if(e.hurt>0&&Math.floor(t*30)%2)x.globalAlpha=.55;
+  x.fillStyle='rgba(0,0,0,.2)'; x.beginPath(); x.ellipse(0,2,46,7,0,0,7); x.fill(); x.translate(0,cr);
+  x.fillStyle='#5a3a24'; x.beginPath(); x.roundRect(-40,-52,72,42,16); x.fill();
+  x.fillStyle='#4a2e1c'; x.fillRect(-32,-14,13,12); x.fillRect(20,-14,13,12);
+  x.fillStyle='#6b4630'; x.beginPath(); x.arc(-40,-44,18,0,7); x.fill();
+  x.fillStyle='#4a2e1c'; x.beginPath(); x.arc(-50,-54,5,0,7); x.fill();
+  x.fillStyle='#241a12'; x.fillRect(-46,-48,3,3); x.fillRect(-37,-48,3,3); x.beginPath(); x.arc(-52,-40,3,0,7); x.fill();
+  if(e.state==='windup'&&Math.floor(t*9)%2){ x.strokeStyle='#ff5a3c'; x.lineWidth=3; x.beginPath(); x.arc(-40,-36,36,0,7); x.stroke(); }
+  x.restore(); x.globalAlpha=1; beastBar(e); }
+function drawGoliath(G){ const cx=G.x, feet=GY;
+  let armLift=0, thrust=0, headDip=0; const vuln=!!G.expose;
+  if(G.state==='windup'){ if(G.atk==='stomp') armLift=Math.min(1,G.stT/0.8); else thrust=-Math.min(1,G.stT/0.6)*0.5; }
+  else if(G.state==='attack'){ if(G.atk==='spear') thrust=1; }
+  else if(G.state==='recover') headDip=Math.min(10,G.stT*14);
+  else if(G.state==='taunt'||G.state==='roar') headDip=-9;   // head thrown back -> forehead exposed
+  x.save(); x.translate(cx,feet); x.scale(-1,1);
+  const tilt=G.down? G.fall*0.95 : Math.sin(t*0.8)*0.02; if(G.stag>0&&!G.down)x.translate(Math.sin(G.stag*60)*4,0); x.rotate(tilt);
+  x.fillStyle='rgba(40,25,5,.3)'; x.beginPath(); x.ellipse(0,4,86,16,0,0,7); x.fill();
+  const armor='#5b4a3a',armorD='#3e3025',bronze='#8a6a3a',gskin='#b98c63';
+  x.fillStyle=armorD; x.beginPath(); x.roundRect(-46,-156,36,158,10); x.fill(); x.beginPath(); x.roundRect(12,-156,36,158,10); x.fill();
+  x.fillStyle=armor; x.beginPath(); x.roundRect(-60,-312,120,176,20); x.fill();
+  x.fillStyle=bronze; x.beginPath(); x.roundRect(-60,-312,120,26,10); x.fill();
+  x.fillStyle=gskin; x.beginPath(); x.roundRect(-90,-304,30,156,14); x.fill();
+  x.save(); x.translate(66,-258); x.rotate(-armLift*0.5+thrust*0.7);
+  x.fillStyle=gskin; x.beginPath(); x.roundRect(-8,-6,30,156,14); x.fill();
+  x.strokeStyle=bronze; x.lineWidth=7; x.beginPath(); x.moveTo(14,-110-armLift*40); x.lineTo(14,196+thrust*40); x.stroke();
+  x.fillStyle='#cdb88a'; x.beginPath(); x.moveTo(14,-134-armLift*40); x.lineTo(6,-106-armLift*40); x.lineTo(22,-106-armLift*40); x.fill(); x.restore();
+  x.save(); x.translate(0,headDip);
+  x.fillStyle=vuln?'#d59a86':gskin; x.beginPath(); x.arc(0,-342,35,0,7); x.fill();
+  x.fillStyle=bronze; x.beginPath(); x.arc(0,-350,37,Math.PI,0); x.fill(); x.fillRect(-37,-352,74,10);
+  if(!G.down){ x.fillStyle='#2a1a10'; x.beginPath(); x.arc(-12,-340,4,0,7); x.fill(); x.beginPath(); x.arc(12,-340,4,0,7); x.fill(); }
+  else { x.strokeStyle='#2a1a10'; x.lineWidth=3; x.beginPath(); x.moveTo(-17,-343); x.lineTo(-7,-337); x.moveTo(7,-337); x.lineTo(17,-343); x.stroke(); }
+  if(vuln&&!G.down&&Math.floor(t*8)%2){ x.strokeStyle='#ff4040'; x.lineWidth=3; x.beginPath(); x.arc(0,-342,46,0,7); x.stroke(); }
+  x.restore(); x.restore();
+  if(G.taunt){ x.textAlign='center'; x.font='italic 600 18px "Fraunces",serif'; x.fillStyle='rgba(10,8,6,.5)'; rr(cx-160,GY-430,320,30,8); x.fill(); x.fillStyle='#ffd7c2'; x.fillText('“'+G.taunt+'”',cx,GY-410); }
+}
+function rr(X,Y,Wd,Hd,r){ x.beginPath(); x.moveTo(X+r,Y); x.arcTo(X+Wd,Y,X+Wd,Y+Hd,r); x.arcTo(X+Wd,Y+Hd,X,Y+Hd,r); x.arcTo(X,Y+Hd,X,Y,r); x.arcTo(X,Y,X+Wd,Y,r); x.closePath(); }
+
+function drawHUD(){
+  // per-player hearts (top)
+  players.forEach((p,i)=>{ if(p.inactive) return; const bx=22+i*230, by=22;
+    x.fillStyle='rgba(0,0,0,.3)'; rr(bx-8,by-8,214,40,12); x.fill();
+    x.fillStyle=p.col.hi; x.font='800 15px "Inter",sans-serif'; x.textAlign='left'; x.textBaseline='middle'; x.fillText(p.col.name,bx,by+10);
+    for(let h=0;h<3;h++){ heart(bx+96+h*26, by+10, 9, (!p.down&&h<p.hp)?'#e0505a':'rgba(255,255,255,.2)'); }
+    if(p.down){ x.fillStyle='#e88'; x.font='800 12px "Inter",sans-serif'; x.fillText('DOWN',bx+96,by+10); }
+  });
+  x.textBaseline='alphabetic';
+  // Goliath fight HUD: each shepherd's five smooth stones + the forehead prompt
+  if(boss&&boss.scene==='fight'&&!boss.down){
+    const ps=players.filter(p=>!p.inactive), n=ps.length, step=150, x0=W/2-(n-1)*step/2;
+    ps.forEach((p,i)=>{ const bx=x0+i*step; x.textAlign='center'; x.font='800 12px "Inter",sans-serif'; x.fillStyle=p.col.hi; x.fillText(p.col.name,bx,H-64);
+      for(let s=0;s<5;s++) dot(bx-34+s*17,H-48,6, s<(p.stones||0)?'#efe3c8':'rgba(255,255,255,.22)'); });
+    if(boss.expose){ x.textAlign='center'; x.font='800 italic 24px "Fraunces",serif'; x.fillStyle=(Math.floor(t*6)%2)?'#ffe27a':'#ffd24a'; x.fillText('His forehead is open — SLING NOW!',W/2,100); }
+    else { x.textAlign='center'; x.font='italic 16px "Fraunces",serif'; x.fillStyle='#f4ecda'; x.fillText('Wait for him to raise his head…',W/2,100); }
+  }
+  // score
+  x.textAlign='right'; x.font='800 18px "Inter",sans-serif'; x.fillStyle='#241a12'; x.fillText('Score '+score,W-20,30);
+  // banner
+  if(banner.t>0){ x.globalAlpha=Math.min(1,banner.t); x.textAlign='center'; x.font='italic 600 26px "Fraunces",serif'; x.fillStyle='rgba(12,14,24,.45)'; rr(W/2-280,H-66,560,38,10); x.fill(); x.fillStyle='#f4ecda'; x.fillText(banner.txt,W/2,H-40); x.globalAlpha=1; }
+}
+function heart(cx,cy,s,c){ x.fillStyle=c; x.beginPath(); x.moveTo(cx,cy+s*.3); x.bezierCurveTo(cx,cy-s*.3,cx-s,cy-s*.3,cx-s,cy+s*.3); x.bezierCurveTo(cx-s,cy+s,cx,cy+s*1.1,cx,cy+s*1.4); x.bezierCurveTo(cx,cy+s*1.1,cx+s,cy+s,cx+s,cy+s*.3); x.bezierCurveTo(cx+s,cy-s*.3,cx,cy-s*.3,cx,cy+s*.3); x.fill(); }
+
+/* ---------- screens ---------- */
+function renderSlots(){ const el=document.getElementById('slots'); if(!el) return;
+  let h=''; for(let i=0;i<4;i++){ const p=players[i]; h+='<div class="slot'+(p?' joined':'')+'" style="'+(p?('border-color:'+p.col.hi+';color:'+p.col.hi):'')+'">'+(p?('✓ '+p.col.name+(p.kb?' (keys)':'')):('Player '+(i+1)+'<br><span style="opacity:.6;font-weight:600">press Ⓐ'+(i===0?' / keys':'')+'</span>'))+'</div>'; }
+  el.innerHTML=h;
+  const sb=document.getElementById('btnStart'); if(sb) sb.textContent=startCountdown>0?('Starting in '+Math.ceil(startCountdown)+'…  (press Ⓐ to join)'):'Begin the adventure';
+}
+function show(id){ ['scTitle','scWin','scLose'].forEach(s=>{ const e=document.getElementById(s); if(e) e.classList.toggle('hidden', s!==id); }); }
+function hideAll(){ ['scTitle','scWin','scLose'].forEach(s=>{ const e=document.getElementById(s); if(e) e.classList.add('hidden'); }); }
+function audioKick(){ if(!AC){ try{ AC=new(window.AudioContext||window.webkitAudioContext)(); }catch(e){} } if(AC&&AC.state!=='running'){ try{ AC.resume(); }catch(e){} } }
+function startGame(){ audioKick();
+  if(players.length===0) ensureKbPlayer();           // solo fallback so it always starts
+  reset(true); state='play'; hideAll(); startCountdown=0;
+  const h=document.getElementById('gpHint'); h.style.display='block'; h.style.opacity='1';
+  clearTimeout(hintTimer); hintTimer=setTimeout(()=>{ h.style.opacity='0'; setTimeout(()=>{ h.style.display='none'; },600); }, 9000);
+}
+function winGame(){ state='win'; document.getElementById('winStat').textContent='A shepherd band of '+players.filter(p=>!p.inactive).length+' · Score '+score; show('scWin'); }
+function loseGame(){ state='lose'; show('scLose'); }
+document.getElementById('btnStart').onclick=startGame;
+document.getElementById('btnWin').onclick=startGame;
+document.getElementById('btnLose').onclick=startGame;
+window.addEventListener('gamepadconnected',()=>{ reconnectPads(); });
+window.addEventListener('gamepaddisconnected',e=>{ const p=players.find(pl=>!pl.kb && pl.pad===e.gamepad.index); if(p){ p.inactive=true; p.pad=null; } });
+
+renderSlots(); show('scTitle'); requestAnimationFrame(loop);
+</script>
+<a href="../index.html" aria-label="Back to the Arcade" style="position:fixed;bottom:10px;left:10px;z-index:99999;background:rgba(26,16,66,.85);color:#e9e4f5;font:800 14px/1 'Inter',system-ui,sans-serif;text-decoration:none;padding:8px 14px;border-radius:999px;border:1px solid #ffffff33">&#8592; Arcade</a>
+<script>
+/* Family Arcade — David unlocks after finishing 3 learning games (shared, same-origin localStorage). */
+(function(){
+  var FA_UNTIL="fa_unlock_until", FA_DONE="fa_quests_done", FA_NEED=3;
+  function gi(k){ try{ return parseInt(localStorage.getItem(k)||"0",10)||0; }catch(_){ return 0; } }
+  if(Date.now() < gi(FA_UNTIL)) return;                 // unlocked -> let the game run
+  var done=gi(FA_DONE), left=Math.max(0, FA_NEED-done);
+  function mount(){
+    var ov=document.createElement("div");
+    ov.id="faLock";
+    ov.style.cssText="position:fixed;inset:0;z-index:2147483600;background:radial-gradient(120% 120% at 50% 30%,#1a2740,#0b1726 72%);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;color:#f4ecda;font-family:'Inter',system-ui,sans-serif";
+    ov.innerHTML=
+      '<div style="font-size:64px;line-height:1;margin-bottom:8px">🔒🐑</div>'+
+      '<div style="font-family:\'Fraunces\',serif;font-weight:600;font-size:clamp(28px,6vw,46px);color:#f1d99b">David is locked</div>'+
+      '<div style="font-size:clamp(16px,3.4vw,22px);max-width:32ch;margin:14px 0 6px;line-height:1.5">Collect <b>'+FA_NEED+' ⭐</b> by finishing learning games to unlock David for <b>30 minutes</b>! Big games like typing give more stars.</div>'+
+      '<div style="font-size:clamp(15px,3vw,19px);opacity:.92;margin:6px 0 22px">'+done+' of '+FA_NEED+' ⭐ — <b>'+left+' more to go</b></div>'+
+      '<a href="../index.html" style="font:800 20px \'Inter\',system-ui,sans-serif;color:#241a12;background:linear-gradient(180deg,#f7d271,#e0a92e);border-radius:12px;padding:14px 30px;text-decoration:none;box-shadow:0 6px 0 #9c7318">← Back to the games</a>';
+    document.body.appendChild(ov);
+    try{ if(window.speechSynthesis) speechSynthesis.cancel(); }catch(_){}
+  }
+  if(document.body) mount(); else document.addEventListener("DOMContentLoaded", mount);
+})();
+</script>
+</body>
+</html>

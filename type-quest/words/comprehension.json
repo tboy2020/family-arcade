@@ -1,0 +1,32 @@
+{
+  "theme": "comp",
+  "name": "Comprehension",
+  "passages": [
+    {"p":"Sam has a red ball. He likes to play with it in the park.","q":"What colour is Sam's ball?","o":["Red","Blue","Green"],"a":0},
+    {"p":"The sun is hot and bright. It helps the plants grow.","q":"What helps the plants grow?","o":["The sun","The moon","A rock"],"a":0},
+    {"p":"Mia planted a seed. She watered it every day. Soon a little flower grew.","q":"What did Mia grow?","o":["A flower","A tree","A toy"],"a":0},
+    {"p":"Ben was kind to the new boy. He shared his lunch and they became friends.","q":"What did Ben share?","o":["His lunch","His bike","His book"],"a":0},
+    {"p":"A frog lives near the pond. It can hop and swim.","q":"Where does the frog live?","o":["Near the pond","On a mountain","In the city"],"a":0},
+    {"p":"Dad made pancakes for breakfast. They were warm and sweet.","q":"What did Dad make?","o":["Pancakes","Pizza","Soup"],"a":0},
+    {"p":"The little dog was lost. A kind girl helped it find its way home.","q":"Who helped the dog?","o":["A kind girl","A big cat","A tall man"],"a":0},
+    {"p":"We thank God for a new day. Every morning is a gift.","q":"What is every morning?","o":["A gift","A test","A game"],"a":0},
+    {"p":"Long ago, people used candles for light. Now we use electric bulbs.","q":"What did people use for light long ago?","o":["Candles","Phones","Cars"],"a":0},
+    {"p":"Ana painted a picture of the sea. She used blue and white.","q":"What did Ana paint?","o":["The sea","A dog","A car"],"a":0},
+    {"p":"Two plus two is four. Math can be fun to learn.","q":"What is two plus two?","o":["Four","Five","Three"],"a":0},
+    {"p":"The bee flew from flower to flower. It helps make honey.","q":"What does the bee help make?","o":["Honey","Bread","Juice"],"a":0},
+    {"p":"Leo read a book about space. He learned that the sun is a star.","q":"What is the sun?","o":["A star","A planet","A cloud"],"a":0},
+    {"p":"It started to rain. Nina opened her umbrella to stay dry.","q":"Why did Nina open her umbrella?","o":["To stay dry","To fly","To sleep"],"a":0},
+    {"p":"The farmer woke up early. He fed the cows and the hens.","q":"What did the farmer feed?","o":["Cows and hens","Cats and dogs","Fish"],"a":0},
+    {"p":"Grandma told a story about a brave king. The children listened quietly.","q":"Who was the story about?","o":["A brave king","A funny clown","A sleepy cat"],"a":0},
+    {"p":"The ice cream melted in the hot sun. It became a sticky puddle.","q":"Why did the ice cream melt?","o":["The sun was hot","It was cold","It was night"],"a":0},
+    {"p":"Tom helped his mom wash the dishes. Then they read a book together.","q":"What did Tom do first?","o":["Washed dishes","Read a book","Went to sleep"],"a":0},
+    {"p":"A spider spins a web to catch its food. The web is sticky and strong.","q":"Why does a spider spin a web?","o":["To catch food","To sleep","To fly"],"a":0},
+    {"p":"The seed grew into a tall tree. Birds built a nest in its branches.","q":"Who built a nest in the tree?","o":["Birds","Fish","Ants"],"a":0},
+    {"p":"Jesus told people to love one another. He was kind to everyone.","q":"What did Jesus tell people to do?","o":["Love one another","Run fast","Stay quiet"],"a":0},
+    {"p":"The moon shines at night. It gives us a soft, gentle light.","q":"When does the moon shine?","o":["At night","At noon","In the rain"],"a":0},
+    {"p":"Kemi lost her shoe at the beach. Her dad helped her find it in the sand.","q":"Where did Kemi lose her shoe?","o":["At the beach","At school","At home"],"a":0},
+    {"p":"The caterpillar ate many leaves. Later it turned into a butterfly.","q":"What did the caterpillar become?","o":["A butterfly","A bird","A bee"],"a":0},
+    {"p":"We planted trees to help the earth. Trees give us fresh air.","q":"What do trees give us?","o":["Fresh air","Candy","Toys"],"a":0},
+    {"p":"The baker made warm bread. The whole shop smelled wonderful.","q":"What did the baker make?","o":["Warm bread","Cold soup","A kite"],"a":0}
+  ]
+}
