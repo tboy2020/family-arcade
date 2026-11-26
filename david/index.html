@@ -898,7 +898,10 @@ renderSlots(); refreshContinue(); show('scTitle'); requestAnimationFrame(loop);
 /* Family Arcade — David unlocks after finishing 3 learning games (shared, same-origin localStorage). */
 (function(){
   var FA_UNTIL="fa_unlock_until", FA_DONE="fa_quests_done", FA_NEED=3;
+  var FA_TEST_MS=2*60*60*1000;                          // grown-up test access window (2h)
   function gi(k){ try{ return parseInt(localStorage.getItem(k)||"0",10)||0; }catch(_){ return 0; } }
+  function grant(ms,reload){ try{ localStorage.setItem(FA_UNTIL, String(Date.now()+ms)); }catch(_){ } if(reload) location.reload(); }
+  try{ if(/^#(open|grownup|test)$/i.test(location.hash)){ grant(FA_TEST_MS,false); return; } }catch(_){}  // grown-up URL shortcut
   if(Date.now() < gi(FA_UNTIL)) return;                 // unlocked -> let the game run
   var done=gi(FA_DONE), left=Math.max(0, FA_NEED-done);
   function mount(){
@@ -912,6 +915,15 @@ renderSlots(); refreshContinue(); show('scTitle'); requestAnimationFrame(loop);
       '<div style="font-size:clamp(15px,3vw,19px);opacity:.92;margin:6px 0 22px">'+done+' of '+FA_NEED+' ⭐ — <b>'+left+' more to go</b></div>'+
       '<a href="../index.html" style="font:800 20px \'Inter\',system-ui,sans-serif;color:#241a12;background:linear-gradient(180deg,#f7d271,#e0a92e);border-radius:12px;padding:14px 30px;text-decoration:none;box-shadow:0 6px 0 #9c7318">← Back to the games</a>';
     document.body.appendChild(ov);
+    /* Grown-up test access (so a parent can test David without grinding stars). */
+    var g=document.createElement("button");
+    g.id="faGrown"; g.textContent="· grown-ups ·";
+    g.style.cssText="position:fixed;right:10px;bottom:10px;z-index:2147483601;background:transparent;border:0;color:#ffffff33;font:700 13px/1 'Inter',system-ui,sans-serif;padding:16px;cursor:pointer;letter-spacing:.04em";
+    var taps=0,timer=null;
+    g.onclick=function(){ taps++; if(timer) clearTimeout(timer); timer=setTimeout(function(){taps=0; g.textContent="· grown-ups ·"; g.style.color="#ffffff33";},3000); if(taps>=5){ grant(FA_TEST_MS,true); return; } g.textContent="grown-up access  "+taps+"/5"; g.style.color="#f1d99b"; };
+    document.body.appendChild(g);
+    /* Controller bypass: hold both bumpers (LB+RB) + press A. Works in Xbox controller mode. */
+    (function poll(){ try{ var ps=(navigator.getGamepads&&navigator.getGamepads())||[]; for(var i=0;i<ps.length;i++){ var p=ps[i]; if(!p||!p.buttons) continue; var b=p.buttons; if(b[4]&&b[4].pressed&&b[5]&&b[5].pressed&&b[0]&&b[0].pressed){ grant(FA_TEST_MS,true); return; } } }catch(_){} requestAnimationFrame(poll); })();
     try{ if(window.speechSynthesis) speechSynthesis.cancel(); }catch(_){}
   }
   if(document.body) mount(); else document.addEventListener("DOMContentLoaded", mount);
